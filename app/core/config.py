@@ -40,7 +40,11 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://user:pass@localhost:5432/fitness",
+        default="postgresql+asyncpg://postgres@localhost:5432/fitness",
+        description=(
+            "Postgres connection URL. Default uses role `postgres` (common locally). "
+            "Set in .env to match your install (e.g. user, password, db name)."
+        ),
     )
     JWT_SECRET: str = Field(
         default="dev-insecure-change-me-use-at-least-32-characters",
@@ -52,6 +56,14 @@ class Settings(BaseSettings):
     APPLE_ISSUER: str = "https://appleid.apple.com"
     APPLE_JWKS_URL: str = "https://appleid.apple.com/auth/keys"
     ENV: str = "development"
+    ALLOW_DEV_AUTH: bool = Field(
+        default=False,
+        description="If true and ENV is development, POST /auth/dev is allowed (never enable in production).",
+    )
+    DEV_AUTH_SECRET: str | None = Field(
+        default=None,
+        description="If set, POST /auth/dev requires header X-Dev-Auth with this value.",
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -83,3 +95,9 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def is_dev_auth_allowed() -> bool:
+    """POST /auth/dev only when explicitly enabled and ENV is development."""
+    s = get_settings()
+    return bool(s.ALLOW_DEV_AUTH and s.ENV == "development")

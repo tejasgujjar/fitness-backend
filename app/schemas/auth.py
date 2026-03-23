@@ -19,6 +19,16 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class DevAuthRequest(BaseModel):
+    """Local testing only: fake Apple `sub` and optional email."""
+
+    apple_user_id: str = Field(
+        ...,
+        description="Stable fake Apple subject, e.g. dev-postman-1",
+    )
+    email: str | None = None
+
+
 class AuthTokensResponse(BaseModel):
     access_token: str
     refresh_token: str
