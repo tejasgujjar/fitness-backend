@@ -42,6 +42,23 @@ class DietPatch(BaseModel):
     fat_grams: float | None = None
 
 
+class DietMacroItemRead(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    sort_order: int
+    food: str
+    qty: float
+    weight: float
+    unit: str
+    carbs: float
+    cals: float
+    protein: float
+    fats: float
+    fiber: float
+    assumptions: str
+
+
 class DietRead(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -62,3 +79,4 @@ class DietRead(BaseModel):
     protein_grams: float | None
     carbs_grams: float | None
     fat_grams: float | None
+    macro_items: list[DietMacroItemRead] = []

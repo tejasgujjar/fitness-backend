@@ -12,6 +12,7 @@ from app.core.time import UTC
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.models import DietMacroItem, WorkoutExerciseItem  # noqa: F401
 from app.models.user import User
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

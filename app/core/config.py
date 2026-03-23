@@ -65,6 +65,26 @@ class Settings(BaseSettings):
         description="If set, POST /auth/dev requires header X-Dev-Auth with this value.",
     )
 
+    OPENAI_API_KEY: str | None = Field(
+        default=None,
+        description="OpenAI API key for Responses API / Agent calls.",
+    )
+    OPENAI_MODEL: str = Field(
+        default="gpt-4o-mini",
+        description="Model ID for Responses API when creating a response.",
+    )
+    OPENAI_AGENT_ID: str | None = Field(
+        default=None,
+        description=(
+            "Optional Agent Builder / workflow id merged into Responses API "
+            "requests as extra_body (see agent_parser)."
+        ),
+    )
+    OPENAI_TIMEOUT_SECONDS: float = Field(
+        default=120.0,
+        description="Timeout for OpenAI Responses API calls.",
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def async_sqlalchemy_database_uri(self) -> str:

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Index, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Index, String, Text, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -12,6 +12,8 @@ from app.models.enums import LogSource
 
 if TYPE_CHECKING:
     from app.models.user import User
+
+from app.models.diet_macro_item import DietMacroItem
 
 
 class DietLog(Base):
@@ -28,6 +30,11 @@ class DietLog(Base):
         index=True,
     )
     local_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
 
     created_at_local: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
@@ -60,6 +67,11 @@ class DietLog(Base):
     fat_grams: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="diet_logs")
+    macro_items: Mapped[list["DietMacroItem"]] = relationship(
+        back_populates="diet_log",
+        cascade="all, delete-orphan",
+        order_by=DietMacroItem.sort_order,
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "local_id", name="uq_diet_user_local"),

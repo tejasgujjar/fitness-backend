@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete as sql_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.time import UTC
 from app.db.session import get_db
@@ -15,7 +16,13 @@ from app.models.diet_log import DietLog
 from app.models.user import User
 from app.schemas.diet import DietCreate, DietPatch, DietRead
 from app.schemas.sync import SyncItemIn
-from app.services.sync import now_utc, upsert_diet_from_create
+from app.services.agent_parser import AgentInvocationError, call_food_agent
+from app.services.sync import (
+    enrich_diet_from_parsed,
+    get_diet_by_local,
+    now_utc,
+    upsert_diet_from_create,
+)
 
 router = APIRouter()
 
@@ -27,14 +34,48 @@ async def create_diet(
     user: Annotated[User, Depends(get_current_user)],
 ) -> DietLog:
     now = now_utc()
+    existing = await get_diet_by_local(db, user.id, body.local_id)
+    if existing:
+        result = await db.execute(
+            select(DietLog)
+            .options(selectinload(DietLog.macro_items))
+            .where(DietLog.id == existing.id),
+        )
+        return result.scalar_one()
+
+    if not body.raw_input or not str(body.raw_input).strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="raw_input is required for diet logging",
+        )
+    try:
+        parsed = await call_food_agent(body.raw_input)
+    except AgentInvocationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        ) from e
+
+    enriched = enrich_diet_from_parsed(body, parsed)
     item = SyncItemIn(
         entity_type="diet",
-        local_id=body.local_id,
+        local_id=enriched.local_id,
         operation="create",
-        payload=body.model_dump(mode="json"),
+        payload=enriched.model_dump(mode="json"),
     )
-    row = await upsert_diet_from_create(db, user, item, now)
-    return row
+    row = await upsert_diet_from_create(
+        db,
+        user,
+        item,
+        now,
+        macro_items=parsed.macros,
+    )
+    result = await db.execute(
+        select(DietLog)
+        .options(selectinload(DietLog.macro_items))
+        .where(DietLog.id == row.id),
+    )
+    return result.scalar_one()
 
 
 @router.get("", response_model=list[DietRead])
@@ -49,7 +90,11 @@ async def list_diet_logs(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[DietLog]:
-    stmt = select(DietLog).where(DietLog.user_id == user.id)
+    stmt = (
+        select(DietLog)
+        .options(selectinload(DietLog.macro_items))
+        .where(DietLog.user_id == user.id)
+    )
     if not include_deleted:
         stmt = stmt.where(DietLog.is_deleted.is_(False))
     if since is not None:
@@ -70,7 +115,9 @@ async def get_diet_log(
     user: Annotated[User, Depends(get_current_user)],
 ) -> DietLog:
     result = await db.execute(
-        select(DietLog).where(
+        select(DietLog)
+        .options(selectinload(DietLog.macro_items))
+        .where(
             DietLog.id == diet_id,
             DietLog.user_id == user.id,
         ),
@@ -89,7 +136,9 @@ async def patch_diet_log(
     user: Annotated[User, Depends(get_current_user)],
 ) -> DietLog:
     result = await db.execute(
-        select(DietLog).where(
+        select(DietLog)
+        .options(selectinload(DietLog.macro_items))
+        .where(
             DietLog.id == diet_id,
             DietLog.user_id == user.id,
         ),

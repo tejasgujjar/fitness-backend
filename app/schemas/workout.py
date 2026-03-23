@@ -40,6 +40,23 @@ class WorkoutPatch(BaseModel):
     calories_estimate: float | None = None
 
 
+class WorkoutExerciseItemRead(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    sort_order: int
+    name: str
+    sets: int
+    reps: int
+    weight_lb: float
+    workout_type: str
+    rpe: float | None
+    time_minutes: float | None
+    assumption: str
+    sport_name: str
+    calories_burn: float
+
+
 class WorkoutRead(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -59,3 +76,4 @@ class WorkoutRead(BaseModel):
     intensity: str | None
     notes: str | None
     calories_estimate: float | None
+    exercise_items: list[WorkoutExerciseItemRead] = []
