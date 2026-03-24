@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from urllib.parse import parse_qs, urlparse, urlunparse
 
-from pydantic import Field, computed_field
+from pydantic import AliasChoices, Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,6 +41,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = Field(
         default="postgresql+asyncpg://postgres@localhost:5432/fitness",
+        validation_alias=AliasChoices("DATABASE_URL", "POSTGRES_URL", "POSTGRESQL_URL"),
         description=(
             "Postgres connection URL. Default uses role `postgres` (common locally). "
             "Set in .env to match your install (e.g. user, password, db name)."
@@ -56,6 +57,10 @@ class Settings(BaseSettings):
     APPLE_ISSUER: str = "https://appleid.apple.com"
     APPLE_JWKS_URL: str = "https://appleid.apple.com/auth/keys"
     ENV: str = "development"
+    RAILWAY_ENVIRONMENT: str | None = Field(
+        default=None,
+        description="Set automatically by Railway runtime.",
+    )
     ALLOW_DEV_AUTH: bool = Field(
         default=False,
         description="If true and ENV is development, POST /auth/dev is allowed (never enable in production).",
@@ -84,6 +89,19 @@ class Settings(BaseSettings):
         default=120.0,
         description="Timeout for OpenAI Responses API calls.",
     )
+
+    @model_validator(mode="after")
+    def _validate_db_url_for_env(self) -> "Settings":
+        # Avoid accidental localhost fallback in hosted environments.
+        db_url = self.DATABASE_URL.strip().lower()
+        is_local_db = "localhost" in db_url or "127.0.0.1" in db_url or "@/" in db_url
+        is_hosted_runtime = self.ENV != "development" or bool(self.RAILWAY_ENVIRONMENT)
+        if is_hosted_runtime and is_local_db:
+            raise ValueError(
+                "DATABASE_URL points to local Postgres in hosted runtime. "
+                "Set Railway service env var DATABASE_URL (or POSTGRES_URL) to your managed Postgres URL."
+            )
+        return self
 
     @computed_field  # type: ignore[prop-decorator]
     @property
