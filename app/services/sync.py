@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.diet_log import DietLog
@@ -22,6 +23,51 @@ from app.schemas.diet import DietCreate, DietPatch
 from app.schemas.sync import SyncItemIn, SyncItemResult
 from app.schemas.workout import WorkoutCreate, WorkoutPatch
 from app.core.time import UTC
+
+def _is_workout_local_unique_violation(exc: IntegrityError) -> bool:
+    return "uq_workout_user_local" in str(exc)
+
+
+def _is_diet_local_unique_violation(exc: IntegrityError) -> bool:
+    return "uq_diet_user_local" in str(exc)
+
+
+async def _attach_exercises_if_missing(
+    db: AsyncSession,
+    row: WorkoutLog,
+    exercise_items: list[WorkoutExerciseParsed] | None,
+) -> None:
+    if not exercise_items:
+        return
+    r = await db.execute(
+        select(WorkoutExerciseItem.id)
+        .where(WorkoutExerciseItem.workout_log_id == row.id)
+        .limit(1),
+    )
+    has_children = r.scalar_one_or_none() is not None
+    if has_children:
+        return
+    for child in _workout_exercise_rows(row.id, exercise_items):
+        db.add(child)
+    await db.flush()
+
+
+async def _attach_macros_if_missing(
+    db: AsyncSession,
+    row: DietLog,
+    macro_items: list[DietMacroItemParsed] | None,
+) -> None:
+    if not macro_items:
+        return
+    r = await db.execute(
+        select(DietMacroItem.id).where(DietMacroItem.diet_log_id == row.id).limit(1),
+    )
+    has_children = r.scalar_one_or_none() is not None
+    if has_children:
+        return
+    for child in _diet_macro_rows(row.id, macro_items):
+        db.add(child)
+    await db.flush()
 
 
 async def _get_workout_by_local(
@@ -206,12 +252,22 @@ async def upsert_workout_from_create(
         calories_estimate=body.calories_estimate,
         llm_payload=llm_payload,
     )
-    db.add(row)
-    await db.flush()
-    if exercise_items:
-        for child in _workout_exercise_rows(row.id, exercise_items):
-            db.add(child)
-        await db.flush()
+    try:
+        async with db.begin_nested():
+            db.add(row)
+            await db.flush()
+            if exercise_items:
+                for child in _workout_exercise_rows(row.id, exercise_items):
+                    db.add(child)
+                await db.flush()
+    except IntegrityError as exc:
+        if not _is_workout_local_unique_violation(exc):
+            raise
+        existing_after_conflict = await _get_workout_by_local(db, user.id, item.local_id)
+        if existing_after_conflict is None:
+            raise
+        await _attach_exercises_if_missing(db, existing_after_conflict, exercise_items)
+        return existing_after_conflict
     return row
 
 
@@ -256,6 +312,7 @@ async def upsert_diet_from_create(
 ) -> DietLog:
     payload = item.payload or {}
     body = DietCreate.model_validate({**payload, "local_id": item.local_id})
+    effective_macro_items = macro_items if macro_items is not None else body.macro_items
     existing = await _get_diet_by_local(db, user.id, item.local_id)
     if existing:
         return existing
@@ -279,12 +336,22 @@ async def upsert_diet_from_create(
         carbs_grams=body.carbs_grams,
         fat_grams=body.fat_grams,
     )
-    db.add(row)
-    await db.flush()
-    if macro_items:
-        for child in _diet_macro_rows(row.id, macro_items):
-            db.add(child)
-        await db.flush()
+    try:
+        async with db.begin_nested():
+            db.add(row)
+            await db.flush()
+            if effective_macro_items:
+                for child in _diet_macro_rows(row.id, effective_macro_items):
+                    db.add(child)
+                await db.flush()
+    except IntegrityError as exc:
+        if not _is_diet_local_unique_violation(exc):
+            raise
+        existing_after_conflict = await _get_diet_by_local(db, user.id, item.local_id)
+        if existing_after_conflict is None:
+            raise
+        await _attach_macros_if_missing(db, existing_after_conflict, effective_macro_items)
+        return existing_after_conflict
     return row
 
 

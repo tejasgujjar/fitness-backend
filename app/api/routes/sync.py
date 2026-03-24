@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.time import UTC
 from app.db.session import get_db
@@ -58,8 +59,16 @@ async def sync_pull(
     include_deleted: bool = Query(False),
     limit: int = Query(200, ge=1, le=500),
 ) -> SyncPullResponse:
-    w_stmt = select(WorkoutLog).where(WorkoutLog.user_id == user.id)
-    d_stmt = select(DietLog).where(DietLog.user_id == user.id)
+    w_stmt = (
+        select(WorkoutLog)
+        .options(selectinload(WorkoutLog.exercise_items))
+        .where(WorkoutLog.user_id == user.id)
+    )
+    d_stmt = (
+        select(DietLog)
+        .options(selectinload(DietLog.macro_items))
+        .where(DietLog.user_id == user.id)
+    )
     if not include_deleted:
         w_stmt = w_stmt.where(WorkoutLog.is_deleted.is_(False))
         d_stmt = d_stmt.where(DietLog.is_deleted.is_(False))
@@ -75,6 +84,7 @@ async def sync_pull(
     diets = list(dr.scalars().all())
 
     since_str = since.isoformat() if since else None
+
     return SyncPullResponse(
         since=since_str,
         workouts=[WorkoutRead.model_validate(w) for w in workouts],
