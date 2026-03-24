@@ -5,23 +5,30 @@ import uuid
 import pytest
 
 from app.schemas.agent_outputs import DietMacroItemParsed, DietParsedOutput
+from app.services.agent_parser import AgentInvocationError
 
 
 @pytest.mark.asyncio
-async def test_create_diet_requires_raw_input(client, auth_headers):
+async def test_create_diet_raw_input_optional(client, auth_headers):
     lid = str(uuid.uuid4())
     r = await client.post(
         "/diet",
-        json={"local_id": lid},
+        json={"local_id": lid, "meal_type": "breakfast", "calories_estimate": 420},
         headers=auth_headers,
     )
-    assert r.status_code == 422
+    assert r.status_code == 201
+    data = r.json()
+    assert data["local_id"] == lid
+    assert data["meal_type"] == "breakfast"
+    assert data["calories_estimate"] == 420
+    assert data["raw_input"] is None
+    assert data["macro_items"] == []
 
 
 @pytest.mark.asyncio
-async def test_create_and_list_diet_with_mocked_agent(client, auth_headers, monkeypatch):
+async def test_diet_breakdown_success(client, auth_headers, monkeypatch):
     async def fake_food_agent(raw_input: str) -> DietParsedOutput:
-        assert raw_input.strip()
+        assert raw_input == "40g oats"
         return DietParsedOutput(
             macros=[
                 DietMacroItemParsed(
@@ -39,31 +46,68 @@ async def test_create_and_list_diet_with_mocked_agent(client, auth_headers, monk
             ],
         )
 
-    monkeypatch.setattr(
-        "app.api.routes.diet.call_food_agent",
-        fake_food_agent,
+    monkeypatch.setattr("app.api.routes.diet.call_food_agent", fake_food_agent)
+    r = await client.get(
+        "/diet/breakdown",
+        params={"raw_input": "40g oats"},
+        headers=auth_headers,
     )
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["macros"]) == 1
+    assert data["macros"][0]["food"] == "Oats"
 
+
+@pytest.mark.asyncio
+async def test_diet_breakdown_requires_non_empty_raw_input(client, auth_headers):
+    r = await client.get(
+        "/diet/breakdown",
+        params={"raw_input": "   "},
+        headers=auth_headers,
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_diet_breakdown_agent_error_returns_502(client, auth_headers, monkeypatch):
+    async def boom(_: str) -> DietParsedOutput:
+        raise AgentInvocationError("simulated failure")
+
+    monkeypatch.setattr("app.api.routes.diet.call_food_agent", boom)
+    r = await client.get(
+        "/diet/breakdown",
+        params={"raw_input": "40g oats"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_create_and_list_diet_persists_payload_only(client, auth_headers, monkeypatch):
+    async def boom(_: str) -> DietParsedOutput:
+        raise AssertionError("POST /diet should not call agent")
+
+    monkeypatch.setattr("app.api.routes.diet.call_food_agent", boom)
     lid = str(uuid.uuid4())
     body = {
         "local_id": lid,
         "raw_input": "40g oats",
         "source": "text",
+        "calories_estimate": 156,
     }
     r = await client.post("/diet", json=body, headers=auth_headers)
     assert r.status_code == 201
     data = r.json()
     assert data["local_id"] == lid
     assert data["calories_estimate"] == 156
-    assert len(data["macro_items"]) == 1
-    assert data["macro_items"][0]["food"] == "Oats"
+    assert data["macro_items"] == []
 
     r2 = await client.get("/diet", headers=auth_headers)
     assert r2.status_code == 200
     rows = r2.json()
     assert len(rows) == 1
     assert rows[0]["id"] == data["id"]
-    assert len(rows[0]["macro_items"]) == 1
+    assert rows[0]["macro_items"] == []
 
 
 @pytest.mark.asyncio
@@ -93,10 +137,7 @@ async def test_diet_idempotent_same_local_id_no_second_agent_call(
             ],
         )
 
-    monkeypatch.setattr(
-        "app.api.routes.diet.call_food_agent",
-        fake_food_agent,
-    )
+    monkeypatch.setattr("app.api.routes.diet.call_food_agent", fake_food_agent)
 
     lid = str(uuid.uuid4())
     body = {"local_id": lid, "raw_input": "test"}
@@ -105,4 +146,4 @@ async def test_diet_idempotent_same_local_id_no_second_agent_call(
     r2 = await client.post("/diet", json=body, headers=auth_headers)
     assert r2.status_code == 201
     assert r2.json()["id"] == r1.json()["id"]
-    assert calls["n"] == 1
+    assert calls["n"] == 0

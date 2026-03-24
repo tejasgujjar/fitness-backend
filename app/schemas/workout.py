@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+from typing import Any
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.models.enums import LogSource
+from app.schemas.agent_outputs import WorkoutExerciseParsed
 
 
 class WorkoutCreate(BaseModel):
     local_id: UUID
+    analysis: str | None = None
+    exercises: list[WorkoutExerciseParsed] = Field(default_factory=list)
     created_at_local: datetime | None = None
     updated_at_local: datetime | None = None
     raw_input: str | None = None
@@ -76,4 +80,5 @@ class WorkoutRead(BaseModel):
     intensity: str | None
     notes: str | None
     calories_estimate: float | None
+    llm_payload: dict[str, Any] | None
     exercise_items: list[WorkoutExerciseItemRead] = []

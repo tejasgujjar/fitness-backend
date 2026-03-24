@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -167,9 +168,21 @@ async def upsert_workout_from_create(
     now: datetime,
     *,
     exercise_items: list[WorkoutExerciseParsed] | None = None,
+    llm_payload: dict[str, Any] | None = None,
 ) -> WorkoutLog:
     payload = item.payload or {}
     body = WorkoutCreate.model_validate({**payload, "local_id": item.local_id})
+    parsed: WorkoutParsedOutput | None = None
+    if body.analysis is not None or body.exercises:
+        parsed = WorkoutParsedOutput(
+            analysis=body.analysis or "",
+            exercises=body.exercises,
+        )
+        body = enrich_workout_from_parsed(body, parsed)
+        if exercise_items is None:
+            exercise_items = parsed.exercises
+        if llm_payload is None:
+            llm_payload = parsed.model_dump(mode="json")
     existing = await _get_workout_by_local(db, user.id, item.local_id)
     if existing:
         return existing
@@ -191,6 +204,7 @@ async def upsert_workout_from_create(
         intensity=body.intensity,
         notes=body.notes,
         calories_estimate=body.calories_estimate,
+        llm_payload=llm_payload,
     )
     db.add(row)
     await db.flush()

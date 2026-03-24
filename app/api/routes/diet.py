@@ -14,11 +14,11 @@ from app.db.session import get_db
 from app.deps import get_current_user
 from app.models.diet_log import DietLog
 from app.models.user import User
+from app.schemas.agent_outputs import DietParsedOutput
 from app.schemas.diet import DietCreate, DietPatch, DietRead
 from app.schemas.sync import SyncItemIn
 from app.services.agent_parser import AgentInvocationError, call_food_agent
 from app.services.sync import (
-    enrich_diet_from_parsed,
     get_diet_by_local,
     now_utc,
     upsert_diet_from_create,
@@ -43,32 +43,18 @@ async def create_diet(
         )
         return result.scalar_one()
 
-    if not body.raw_input or not str(body.raw_input).strip():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="raw_input is required for diet logging",
-        )
-    try:
-        parsed = await call_food_agent(body.raw_input)
-    except AgentInvocationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
-        ) from e
-
-    enriched = enrich_diet_from_parsed(body, parsed)
     item = SyncItemIn(
         entity_type="diet",
-        local_id=enriched.local_id,
+        local_id=body.local_id,
         operation="create",
-        payload=enriched.model_dump(mode="json"),
+        payload=body.model_dump(mode="json"),
     )
     row = await upsert_diet_from_create(
         db,
         user,
         item,
         now,
-        macro_items=parsed.macros,
+        macro_items=None,
     )
     result = await db.execute(
         select(DietLog)
@@ -76,6 +62,24 @@ async def create_diet(
         .where(DietLog.id == row.id),
     )
     return result.scalar_one()
+
+
+@router.get("/breakdown", response_model=DietParsedOutput)
+async def diet_breakdown(
+    raw_input: str = Query(..., description="Raw diet input to parse"),
+) -> DietParsedOutput:
+    if not raw_input.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="raw_input is required for diet breakdown",
+        )
+    try:
+        return await call_food_agent(raw_input)
+    except AgentInvocationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        ) from e
 
 
 @router.get("", response_model=list[DietRead])

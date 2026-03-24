@@ -14,11 +14,11 @@ from app.db.session import get_db
 from app.deps import get_current_user
 from app.models.user import User
 from app.models.workout_log import WorkoutLog
+from app.schemas.agent_outputs import WorkoutParsedOutput
 from app.schemas.sync import SyncItemIn
 from app.schemas.workout import WorkoutCreate, WorkoutPatch, WorkoutRead
 from app.services.agent_parser import AgentInvocationError, call_workout_agent
 from app.services.sync import (
-    enrich_workout_from_parsed,
     get_workout_by_local,
     now_utc,
     upsert_workout_from_create,
@@ -43,32 +43,25 @@ async def create_workout(
         )
         return result.scalar_one()
 
-    if not body.raw_input or not str(body.raw_input).strip():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="raw_input is required for workout logging",
-        )
-    try:
-        parsed = await call_workout_agent(body.raw_input)
-    except AgentInvocationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
-        ) from e
-
-    enriched = enrich_workout_from_parsed(body, parsed)
     item = SyncItemIn(
         entity_type="workout",
-        local_id=enriched.local_id,
+        local_id=body.local_id,
         operation="create",
-        payload=enriched.model_dump(mode="json"),
+        payload=body.model_dump(mode="json"),
     )
+    llm_payload: dict[str, object] | None = None
+    if body.analysis is not None or body.exercises:
+        llm_payload = body.model_dump(
+            mode="json",
+            include={"analysis", "exercises"},
+        )
     row = await upsert_workout_from_create(
         db,
         user,
         item,
         now,
-        exercise_items=parsed.exercises,
+        exercise_items=body.exercises or None,
+        llm_payload=llm_payload,
     )
     result = await db.execute(
         select(WorkoutLog)
@@ -76,6 +69,24 @@ async def create_workout(
         .where(WorkoutLog.id == row.id),
     )
     return result.scalar_one()
+
+
+@router.get("/breakdown", response_model=WorkoutParsedOutput)
+async def workout_breakdown(
+    raw_input: str = Query(..., description="Raw workout input to parse"),
+) -> WorkoutParsedOutput:
+    if not raw_input.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="raw_input is required for workout breakdown",
+        )
+    try:
+        return await call_workout_agent(raw_input)
+    except AgentInvocationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        ) from e
 
 
 @router.get("", response_model=list[WorkoutRead])

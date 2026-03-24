@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, Uuid, func
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -64,6 +64,7 @@ class WorkoutLog(Base):
     intensity: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     calories_estimate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    llm_payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="workout_logs")
     exercise_items: Mapped[list["WorkoutExerciseItem"]] = relationship(
