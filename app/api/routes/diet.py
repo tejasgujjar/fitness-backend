@@ -54,7 +54,7 @@ async def create_diet(
         user,
         item,
         now,
-        macro_items=None,
+        macro_items=body.macro_items or None,
     )
     result = await db.execute(
         select(DietLog)

@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 from app.models.enums import LogSource
+from app.schemas.agent_outputs import DietMacroItemParsed
 
 
 class DietCreate(BaseModel):
@@ -23,6 +24,10 @@ class DietCreate(BaseModel):
     protein_grams: float | None = None
     carbs_grams: float | None = None
     fat_grams: float | None = None
+    macro_items: list[DietMacroItemParsed] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("macro_items", "macros"),
+    )
 
 
 class DietPatch(BaseModel):

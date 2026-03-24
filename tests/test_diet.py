@@ -111,6 +111,43 @@ async def test_create_and_list_diet_persists_payload_only(client, auth_headers, 
 
 
 @pytest.mark.asyncio
+async def test_create_diet_persists_macro_items_from_payload(client, auth_headers):
+    lid = str(uuid.uuid4())
+    body = {
+        "local_id": lid,
+        "meal_type": "breakfast",
+        "macros": [
+            {
+                "food": "Oats",
+                "qty": 1,
+                "weight": 40,
+                "unit": "g",
+                "carbs": 25,
+                "cals": 156,
+                "protein": 5,
+                "fats": 3,
+                "fiber": 4,
+                "assumptions": "Rolled oats",
+            },
+        ],
+    }
+    r = await client.post("/diet", json=body, headers=auth_headers)
+    assert r.status_code == 201
+    data = r.json()
+    assert data["local_id"] == lid
+    assert len(data["macro_items"]) == 1
+    assert data["macro_items"][0]["food"] == "Oats"
+    assert data["macro_items"][0]["carbs"] == 25
+
+    r2 = await client.get("/diet", headers=auth_headers)
+    assert r2.status_code == 200
+    rows = r2.json()
+    assert len(rows) == 1
+    assert len(rows[0]["macro_items"]) == 1
+    assert rows[0]["macro_items"][0]["food"] == "Oats"
+
+
+@pytest.mark.asyncio
 async def test_diet_idempotent_same_local_id_no_second_agent_call(
     client,
     auth_headers,
