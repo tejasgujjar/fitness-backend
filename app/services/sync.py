@@ -52,7 +52,7 @@ async def _attach_exercises_if_missing(
     await db.flush()
 
 
-async def _attach_macros_if_missing(
+async def attach_macros_if_missing(
     db: AsyncSession,
     row: DietLog,
     macro_items: list[DietMacroItemParsed] | None,
@@ -315,6 +315,7 @@ async def upsert_diet_from_create(
     effective_macro_items = macro_items if macro_items is not None else body.macro_items
     existing = await _get_diet_by_local(db, user.id, item.local_id)
     if existing:
+        await attach_macros_if_missing(db, existing, effective_macro_items)
         return existing
 
     row = DietLog(
@@ -350,7 +351,7 @@ async def upsert_diet_from_create(
         existing_after_conflict = await _get_diet_by_local(db, user.id, item.local_id)
         if existing_after_conflict is None:
             raise
-        await _attach_macros_if_missing(db, existing_after_conflict, effective_macro_items)
+        await attach_macros_if_missing(db, existing_after_conflict, effective_macro_items)
         return existing_after_conflict
     return row
 

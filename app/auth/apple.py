@@ -33,6 +33,8 @@ def verify_apple_identity_token(identity_token: str) -> dict[str, Any]:
     aud = payload.get("aud")
     auds = [aud] if isinstance(aud, str) else list(aud or [])
     if settings.APPLE_CLIENT_ID not in auds:
-        msg = "Invalid audience"
-        raise ValueError(msg)
+        raise ValueError(
+            f"Invalid audience: token aud={auds!r}, "
+            f"expected APPLE_CLIENT_ID={settings.APPLE_CLIENT_ID!r}"
+        )
     return payload

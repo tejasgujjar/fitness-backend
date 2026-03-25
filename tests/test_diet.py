@@ -148,6 +148,49 @@ async def test_create_diet_persists_macro_items_from_payload(client, auth_header
 
 
 @pytest.mark.asyncio
+async def test_create_diet_idempotent_attaches_macros_when_log_had_none(
+    client,
+    auth_headers,
+):
+    """If diet_logs row exists for local_id without children, a retry with macros fills diet_macro_items."""
+    lid = str(uuid.uuid4())
+    r1 = await client.post(
+        "/diet",
+        json={"local_id": lid, "raw_input": "2 banana"},
+        headers=auth_headers,
+    )
+    assert r1.status_code == 201
+    assert r1.json()["macro_items"] == []
+
+    r2 = await client.post(
+        "/diet",
+        json={
+            "local_id": lid,
+            "raw_input": "2 banana",
+            "macros": [
+                {
+                    "food": "Banana",
+                    "qty": 2,
+                    "weight": 240,
+                    "unit": "grams",
+                    "carbs": 54,
+                    "cals": 210,
+                    "protein": 2.4,
+                    "fats": 0.6,
+                    "fiber": 6,
+                    "assumptions": "test",
+                },
+            ],
+        },
+        headers=auth_headers,
+    )
+    assert r2.status_code == 201
+    assert r2.json()["id"] == r1.json()["id"]
+    assert len(r2.json()["macro_items"]) == 1
+    assert r2.json()["macro_items"][0]["food"] == "Banana"
+
+
+@pytest.mark.asyncio
 async def test_diet_idempotent_same_local_id_no_second_agent_call(
     client,
     auth_headers,

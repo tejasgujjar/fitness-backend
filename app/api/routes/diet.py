@@ -19,6 +19,7 @@ from app.schemas.diet import DietCreate, DietPatch, DietRead
 from app.schemas.sync import SyncItemIn
 from app.services.agent_parser import AgentInvocationError, call_food_agent
 from app.services.sync import (
+    attach_macros_if_missing,
     get_diet_by_local,
     now_utc,
     upsert_diet_from_create,
@@ -36,6 +37,7 @@ async def create_diet(
     now = now_utc()
     existing = await get_diet_by_local(db, user.id, body.local_id)
     if existing:
+        await attach_macros_if_missing(db, existing, body.macro_items)
         result = await db.execute(
             select(DietLog)
             .options(selectinload(DietLog.macro_items))
