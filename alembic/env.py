@@ -11,6 +11,7 @@ from app.db.base import Base
 from app.models import (  # noqa: F401
     DietLog,
     DietMacroItem,
+    RequestAudit,
     User,
     WorkoutExerciseItem,
     WorkoutLog,

@@ -10,9 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.security import create_access_token
 from app.core.time import UTC
 from app.db.base import Base
+import app.db.session as db_session_module
 from app.db.session import get_db
-from app.main import app
-from app.models import DietMacroItem, WorkoutExerciseItem  # noqa: F401
+from app.main import app, fastapi_app
+from app.models import DietMacroItem, RequestAudit, WorkoutExerciseItem  # noqa: F401
 from app.models.user import User
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -30,6 +31,8 @@ async def engine():
 @pytest_asyncio.fixture
 async def client(engine) -> AsyncGenerator[AsyncClient, None]:
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    prev_session_local = db_session_module.AsyncSessionLocal
+    db_session_module.AsyncSessionLocal = factory
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         async with factory() as session:
@@ -40,11 +43,14 @@ async def client(engine) -> AsyncGenerator[AsyncClient, None]:
                 await session.rollback()
                 raise
 
-    app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_db] = override_get_db
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
-    app.dependency_overrides.clear()
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
+    finally:
+        db_session_module.AsyncSessionLocal = prev_session_local
+        fastapi_app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture
