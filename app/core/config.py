@@ -69,6 +69,13 @@ class Settings(BaseSettings):
         default=None,
         description="If set, POST /auth/dev requires header X-Dev-Auth with this value.",
     )
+    DEVELOPER_MODE_ENABLED_USER_EMAILS: str = Field(
+        default="",
+        description=(
+            "Comma-separated allowlist of user emails that can enable developer-mode app flags. "
+            "Used for user-scoped APP_FLAG_ENABLE_DEVELOPER_MODE."
+        ),
+    )
 
     OPENAI_API_KEY: str | None = Field(
         default=None,
@@ -95,7 +102,7 @@ class Settings(BaseSettings):
         description="Max bytes stored per request/response body in request_audits (truncated beyond this).",
     )
     AUDIT_EXCLUDED_PATH_PREFIXES: str = Field(
-        default="/health,/docs,/openapi.json,/redoc",
+        default="/health,/docs,/openapi.json,/redoc,/api/app-flags",
         description=(
             "Comma-separated URL path prefixes that skip persistence to request_audits. "
             "Set to empty string to audit all routes."
