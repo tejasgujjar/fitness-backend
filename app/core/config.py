@@ -90,6 +90,18 @@ class Settings(BaseSettings):
         description="Timeout for OpenAI Responses API calls.",
     )
 
+    AUDIT_MAX_BODY_BYTES: int = Field(
+        default=65536,
+        description="Max bytes stored per request/response body in request_audits (truncated beyond this).",
+    )
+    AUDIT_EXCLUDED_PATH_PREFIXES: str = Field(
+        default="/health,/docs,/openapi.json,/redoc",
+        description=(
+            "Comma-separated URL path prefixes that skip persistence to request_audits. "
+            "Set to empty string to audit all routes."
+        ),
+    )
+
     @model_validator(mode="after")
     def _validate_db_url_for_env(self) -> "Settings":
         # Avoid accidental localhost fallback in hosted environments.
@@ -119,6 +131,12 @@ class Settings(BaseSettings):
         if sslmode in ("require", "verify-ca", "verify-full"):
             args["ssl"] = True
         return args
+
+    def audit_excluded_path_prefixes(self) -> list[str]:
+        raw = self.AUDIT_EXCLUDED_PATH_PREFIXES.strip()
+        if not raw:
+            return []
+        return [p.strip() for p in raw.split(",") if p.strip()]
 
     @computed_field  # type: ignore[prop-decorator]
     @property

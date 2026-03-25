@@ -29,6 +29,10 @@ async def test_auth_dev_disabled_returns_404(client, monkeypatch):
 async def test_auth_dev_disabled_when_env_not_development(client, monkeypatch):
     monkeypatch.setenv("ALLOW_DEV_AUTH", "true")
     monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+asyncpg://user:pass@db.example.com:5432/fitness",
+    )
     get_settings.cache_clear()
 
     r = await client.post(
