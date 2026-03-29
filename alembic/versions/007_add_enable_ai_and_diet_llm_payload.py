@@ -1,6 +1,6 @@
 """add enable_ai and diet llm payload
 
-Revision ID: 007_add_enable_ai_and_diet_llm_payload
+Revision ID: 007_enable_ai_diet_llm
 Revises: 006_account_deletion_histories
 Create Date: 2026-03-29
 
@@ -12,7 +12,7 @@ from typing import Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "007_add_enable_ai_and_diet_llm_payload"
+revision: str = "007_enable_ai_diet_llm"
 down_revision: Union[str, Sequence[str], None] = "006_account_deletion_histories"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
