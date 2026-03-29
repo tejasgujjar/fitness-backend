@@ -49,8 +49,11 @@ async def create_workout(
         operation="create",
         payload=body.model_dump(mode="json"),
     )
+    exercise_items = body.exercises or None
     llm_payload: dict[str, object] | None = None
-    if body.analysis is not None or body.exercises:
+    if body.enable_ai is False:
+        exercise_items = None
+    elif body.analysis is not None or body.exercises:
         llm_payload = body.model_dump(
             mode="json",
             include={"analysis", "exercises"},
@@ -60,7 +63,7 @@ async def create_workout(
         user,
         item,
         now,
-        exercise_items=body.exercises or None,
+        exercise_items=exercise_items,
         llm_payload=llm_payload,
     )
     result = await db.execute(

@@ -219,7 +219,10 @@ async def upsert_workout_from_create(
     payload = item.payload or {}
     body = WorkoutCreate.model_validate({**payload, "local_id": item.local_id})
     parsed: WorkoutParsedOutput | None = None
-    if body.analysis is not None or body.exercises:
+    if body.enable_ai is False:
+        exercise_items = None
+        llm_payload = None
+    elif body.analysis is not None or body.exercises:
         parsed = WorkoutParsedOutput(
             analysis=body.analysis or "",
             exercises=body.exercises,
@@ -250,6 +253,7 @@ async def upsert_workout_from_create(
         intensity=body.intensity,
         notes=body.notes,
         calories_estimate=body.calories_estimate,
+        enable_ai=body.enable_ai,
         llm_payload=llm_payload,
     )
     try:
@@ -309,10 +313,19 @@ async def upsert_diet_from_create(
     now: datetime,
     *,
     macro_items: list[DietMacroItemParsed] | None = None,
+    llm_payload: dict[str, Any] | None = None,
 ) -> DietLog:
     payload = item.payload or {}
     body = DietCreate.model_validate({**payload, "local_id": item.local_id})
     effective_macro_items = macro_items if macro_items is not None else body.macro_items
+    effective_llm_payload = llm_payload
+    if body.enable_ai is False:
+        effective_macro_items = None
+        effective_llm_payload = None
+    elif effective_llm_payload is None and effective_macro_items:
+        effective_llm_payload = {
+            "macros": [m.model_dump(mode="json") for m in effective_macro_items],
+        }
     existing = await _get_diet_by_local(db, user.id, item.local_id)
     if existing:
         await attach_macros_if_missing(db, existing, effective_macro_items)
@@ -336,6 +349,8 @@ async def upsert_diet_from_create(
         protein_grams=body.protein_grams,
         carbs_grams=body.carbs_grams,
         fat_grams=body.fat_grams,
+        enable_ai=body.enable_ai,
+        llm_payload=effective_llm_payload,
     )
     try:
         async with db.begin_nested():

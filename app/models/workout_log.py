@@ -64,6 +64,7 @@ class WorkoutLog(Base):
     intensity: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     calories_estimate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    enable_ai: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     llm_payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="workout_logs")

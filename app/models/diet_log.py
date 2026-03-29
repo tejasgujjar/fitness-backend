@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Index, String, Text, UniqueConstraint, Uuid, func
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, Index, String, Text, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -65,6 +65,8 @@ class DietLog(Base):
     protein_grams: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     carbs_grams: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     fat_grams: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    enable_ai: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    llm_payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="diet_logs")
     macro_items: Mapped[list["DietMacroItem"]] = relationship(

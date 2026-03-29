@@ -21,6 +21,8 @@ async def test_create_diet_raw_input_optional(client, auth_headers):
     assert data["local_id"] == lid
     assert data["meal_type"] == "breakfast"
     assert data["calories_estimate"] == 420
+    assert data["enable_ai"] is None
+    assert data["llm_payload"] is None
     assert data["raw_input"] is None
     assert data["macro_items"] == []
 
@@ -100,6 +102,8 @@ async def test_create_and_list_diet_persists_payload_only(client, auth_headers, 
     data = r.json()
     assert data["local_id"] == lid
     assert data["calories_estimate"] == 156
+    assert data["enable_ai"] is None
+    assert data["llm_payload"] is None
     assert data["macro_items"] == []
 
     r2 = await client.get("/diet", headers=auth_headers)
@@ -107,6 +111,8 @@ async def test_create_and_list_diet_persists_payload_only(client, auth_headers, 
     rows = r2.json()
     assert len(rows) == 1
     assert rows[0]["id"] == data["id"]
+    assert rows[0]["enable_ai"] is None
+    assert rows[0]["llm_payload"] is None
     assert rows[0]["macro_items"] == []
 
 
@@ -135,16 +141,85 @@ async def test_create_diet_persists_macro_items_from_payload(client, auth_header
     assert r.status_code == 201
     data = r.json()
     assert data["local_id"] == lid
+    assert data["enable_ai"] is None
     assert len(data["macro_items"]) == 1
     assert data["macro_items"][0]["food"] == "Oats"
     assert data["macro_items"][0]["carbs"] == 25
+    assert data["llm_payload"] is not None
+    assert len(data["llm_payload"]["macros"]) == 1
+    assert data["llm_payload"]["macros"][0]["food"] == "Oats"
+    assert "id" not in data["llm_payload"]["macros"][0]
 
     r2 = await client.get("/diet", headers=auth_headers)
     assert r2.status_code == 200
     rows = r2.json()
     assert len(rows) == 1
+    assert rows[0]["enable_ai"] is None
+    assert rows[0]["llm_payload"] is not None
+    assert len(rows[0]["llm_payload"]["macros"]) == 1
+    assert rows[0]["llm_payload"]["macros"][0]["food"] == "Oats"
     assert len(rows[0]["macro_items"]) == 1
     assert rows[0]["macro_items"][0]["food"] == "Oats"
+
+
+@pytest.mark.asyncio
+async def test_create_diet_enable_ai_false_clears_ai_derived_data(client, auth_headers):
+    lid = str(uuid.uuid4())
+    body = {
+        "local_id": lid,
+        "enableAI": False,
+        "macros": [
+            {
+                "food": "Banana",
+                "qty": 1,
+                "weight": 120,
+                "unit": "g",
+                "carbs": 27,
+                "cals": 105,
+                "protein": 1.3,
+                "fats": 0.4,
+                "fiber": 3.1,
+                "assumptions": "ripe banana",
+            },
+        ],
+    }
+    r = await client.post("/diet", json=body, headers=auth_headers)
+    assert r.status_code == 201
+    data = r.json()
+    assert data["enable_ai"] is False
+    assert data["macro_items"] == []
+    assert data["llm_payload"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_diet_enable_ai_true_keeps_ai_derived_data(client, auth_headers):
+    lid = str(uuid.uuid4())
+    body = {
+        "local_id": lid,
+        "enableAI": True,
+        "macros": [
+            {
+                "food": "Greek Yogurt",
+                "qty": 1,
+                "weight": 170,
+                "unit": "g",
+                "carbs": 6,
+                "cals": 100,
+                "protein": 17,
+                "fats": 0,
+                "fiber": 0,
+                "assumptions": "plain nonfat",
+            },
+        ],
+    }
+    r = await client.post("/diet", json=body, headers=auth_headers)
+    assert r.status_code == 201
+    data = r.json()
+    assert data["enable_ai"] is True
+    assert len(data["macro_items"]) == 1
+    assert data["llm_payload"] is not None
+    assert len(data["llm_payload"]["macros"]) == 1
+    assert data["llm_payload"]["macros"][0]["food"] == "Greek Yogurt"
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ async def test_create_workout_raw_input_optional(client, auth_headers):
     assert data["local_id"] == lid
     assert data["workout_type"] == "run"
     assert data["duration_minutes"] == 20
+    assert data["enable_ai"] is None
     assert data["raw_input"] is None
     assert data["exercise_items"] == []
 
@@ -125,6 +126,7 @@ async def test_create_and_list_workout_persists_llm_payload(
     assert data["duration_minutes"] == 30
     assert data["calories_estimate"] == 300
     assert data["notes"] == "Steady run workout."
+    assert data["enable_ai"] is None
     assert data["llm_payload"] == {
         "analysis": "Steady run workout.",
         "exercises": [
@@ -152,8 +154,69 @@ async def test_create_and_list_workout_persists_llm_payload(
     rows = r2.json()
     assert len(rows) == 1
     assert rows[0]["id"] == data["id"]
+    assert rows[0]["enable_ai"] is None
     assert rows[0]["llm_payload"] == data["llm_payload"]
     assert rows[0]["exercise_items"][0]["assumption"] == "Average pace assumed from text."
+
+
+@pytest.mark.asyncio
+async def test_create_workout_enable_ai_false_clears_ai_derived_data(client, auth_headers):
+    lid = str(uuid.uuid4())
+    body = {
+        "local_id": lid,
+        "enableAI": False,
+        "analysis": "Should be ignored",
+        "exercises": [
+            {
+                "name": "Ignored",
+                "sets": 1,
+                "reps": 1,
+                "weight_lb": 10,
+                "workout_type": "test",
+                "rpe": 5,
+                "time_minutes": 5,
+                "assumption": "ignored",
+                "sport_name": "Test",
+                "calories_burn": 50,
+            },
+        ],
+    }
+    r = await client.post("/workouts", json=body, headers=auth_headers)
+    assert r.status_code == 201
+    data = r.json()
+    assert data["enable_ai"] is False
+    assert data["llm_payload"] is None
+    assert data["exercise_items"] == []
+
+
+@pytest.mark.asyncio
+async def test_create_workout_enable_ai_true_keeps_ai_derived_data(client, auth_headers):
+    lid = str(uuid.uuid4())
+    body = {
+        "local_id": lid,
+        "enableAI": True,
+        "analysis": "Workout summary.",
+        "exercises": [
+            {
+                "name": "Rowing",
+                "sets": 1,
+                "reps": 1,
+                "weight_lb": 0,
+                "workout_type": "cardio",
+                "rpe": 6,
+                "time_minutes": 15,
+                "assumption": "steady pace",
+                "sport_name": "Rowing",
+                "calories_burn": 120,
+            },
+        ],
+    }
+    r = await client.post("/workouts", json=body, headers=auth_headers)
+    assert r.status_code == 201
+    data = r.json()
+    assert data["enable_ai"] is True
+    assert data["llm_payload"] is not None
+    assert len(data["exercise_items"]) == 1
 
 
 @pytest.mark.asyncio

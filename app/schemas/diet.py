@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from datetime import datetime
 from uuid import UUID
 
@@ -27,6 +28,10 @@ class DietCreate(BaseModel):
     macro_items: list[DietMacroItemParsed] = Field(
         default_factory=list,
         validation_alias=AliasChoices("macro_items", "macros"),
+    )
+    enable_ai: bool | None = Field(
+        default=None,
+        validation_alias=AliasChoices("enable_ai", "enableAI"),
     )
 
 
@@ -84,4 +89,6 @@ class DietRead(BaseModel):
     protein_grams: float | None
     carbs_grams: float | None
     fat_grams: float | None
+    enable_ai: bool | None
+    llm_payload: dict[str, Any] | None
     macro_items: list[DietMacroItemRead] = []

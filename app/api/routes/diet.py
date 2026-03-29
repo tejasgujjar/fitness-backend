@@ -51,12 +51,19 @@ async def create_diet(
         operation="create",
         payload=body.model_dump(mode="json"),
     )
+    macro_items = body.macro_items or None
+    llm_payload: dict[str, object] | None = None
+    if body.enable_ai is False:
+        macro_items = None
+    elif body.macro_items:
+        llm_payload = {"macros": body.model_dump(mode="json", include={"macro_items"})["macro_items"]}
     row = await upsert_diet_from_create(
         db,
         user,
         item,
         now,
-        macro_items=body.macro_items or None,
+        macro_items=macro_items,
+        llm_payload=llm_payload,
     )
     result = await db.execute(
         select(DietLog)

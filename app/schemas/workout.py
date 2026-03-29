@@ -4,7 +4,7 @@ from typing import Any
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from app.models.enums import LogSource
 from app.schemas.agent_outputs import WorkoutExerciseParsed
@@ -26,6 +26,10 @@ class WorkoutCreate(BaseModel):
     intensity: str | None = None
     notes: str | None = None
     calories_estimate: float | None = None
+    enable_ai: bool | None = Field(
+        default=None,
+        validation_alias=AliasChoices("enable_ai", "enableAI"),
+    )
 
 
 class WorkoutPatch(BaseModel):
@@ -80,5 +84,6 @@ class WorkoutRead(BaseModel):
     intensity: str | None
     notes: str | None
     calories_estimate: float | None
+    enable_ai: bool | None
     llm_payload: dict[str, Any] | None
     exercise_items: list[WorkoutExerciseItemRead] = []
